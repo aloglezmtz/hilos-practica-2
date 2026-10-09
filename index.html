@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Simulador de planificación de hilos · Práctica 2</title>
+<style>
+:root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);
+--bg:#f3f6fb;--card:#fff;--ink:#16243b;--mut:#5b6b85;--line:#d6deeb;--term:#0f172a;--ok:#16a34a}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0e1522;--card:#17202f;--ink:#e8eefb;--mut:#9fb0cc;--line:#2a374d;--term:#0b0d15}}
+:root[data-theme="dark"]{--bg:#0e1522;--card:#17202f;--ink:#e8eefb;--mut:#9fb0cc;--line:#2a374d;--term:#0b0d15}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*,*:before,*:after{box-sizing:inherit}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+main{max-width:1000px;margin:0 auto;padding:18px 16px 40px}
+h1{font-size:1.45rem;line-height:1.2;margin:.2rem 0}
+.sub{color:var(--mut);margin:0 0 14px}
+.panel{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:12px}
+.ctrl{display:flex;flex-wrap:wrap;gap:12px 20px;align-items:center}
+.ctrl label{display:flex;gap:8px;align-items:center;font-weight:600}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.seg button{border:0;border-radius:0;padding:6px 12px}.seg button.on{background:#2563eb;color:#fff;font-weight:700}
+select,button{font:inherit;border-radius:8px;border:1px solid var(--line);background:var(--card);color:var(--ink);padding:7px 12px;cursor:pointer}
+button.main{background:#2563eb;border-color:#2563eb;color:#fff;font-weight:700}
+button:disabled{opacity:.45;cursor:default}
+button:focus-visible,select:focus-visible,input:focus-visible,summary:focus-visible{outline:3px solid #f59e0b;outline-offset:2px}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media (max-width:760px){.two{grid-template-columns:1fr}}
+.head{display:flex;justify-content:space-between;align-items:baseline;gap:8px;margin-bottom:8px}
+.head b{font-size:1rem}.head span{color:var(--mut);font-variant-numeric:tabular-nums}
+.term{background:var(--term);color:#e2e8f0;border-radius:10px;padding:10px 12px;height:330px;overflow-y:auto;font:12.5px/1.5 ui-monospace,Menlo,Consolas,monospace}
+.term .A{color:#60a5fa}.term .B{color:#5eead4}.term .C{color:#fcd34d}.term .sys{color:#94a3b8}
+.lane{display:grid;grid-template-columns:62px 1fr;gap:8px;align-items:center;margin:8px 0}
+.lane b{font-weight:700}
+.cells{display:grid;grid-template-columns:repeat(10,1fr);gap:3px}
+.c{height:28px;border-radius:6px;background:var(--line);color:var(--mut);display:grid;place-items:center;font-size:.72rem;font-weight:700;transition:background .15s,color .15s}
+.note{color:var(--mut);font-size:.85rem;margin:10px 0 0}
+.hist{display:grid;grid-template-columns:78px 1fr 58px;gap:8px;align-items:center;margin:6px 0}
+.hist small{color:var(--mut);font-variant-numeric:tabular-nums}
+.strip{display:grid;grid-template-columns:repeat(30,minmax(13px,1fr));gap:2px}
+.strip i{font-style:normal;height:20px;border-radius:4px;color:#fff;display:grid;place-items:center;font-size:.58rem;font-weight:700}
+.scroll{overflow-x:auto}.scroll>div{min-width:560px}
+.stat{display:flex;flex-wrap:wrap;gap:8px 22px;margin:8px 0 2px;font-weight:700}
+.stat span{color:var(--mut);font-weight:400}
+details{border-top:1px dashed var(--line);padding:8px 0}details:first-of-type{border-top:0}
+summary{cursor:pointer;font-weight:700}details p{margin:6px 0 0;color:var(--mut)}
+footer{color:var(--mut);font-size:.82rem;margin-top:14px}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<main>
+<h1>¿Por qué el orden de los hilos cambia en cada ejecución?</h1>
+<p class="sub">Cada hilo imprime del 1 al 10 con una pausa. Ejecuta varias veces y compara la mezcla de los hilos con la ejecución secuencial.</p>
+
+<div class="panel ctrl">
+  <label>Hilos: <span class="seg" id="seg"><button data-n="2">2</button><button data-n="3" class="on">3</button></span></label>
+  <label>Pausa: <input id="p" type="range" min="0.05" max="0.3" step="0.05" value="0.1"><output id="pv">0.10 s</output></label>
+  <label><input id="al" type="checkbox"> Pausa aleatoria</label>
+  <label>Velocidad: <select id="sp"><option value="1">1×</option><option value="2" selected>2×</option><option value="4">4×</option></select></label>
+</div>
+<div class="panel ctrl">
+  <button id="bt" class="main">Ejecutar con hilos</button>
+  <button id="bs">Ejecutar secuencial</button>
+  <button id="b10">Repetir 10 veces (rápido)</button>
+  <button id="bc">Borrar historial</button>
+</div>
+
+<div class="two">
+  <div class="panel"><div class="head"><b id="mode">Salida</b><span id="clk">0.00 s</span></div><div class="term" id="term" aria-live="polite"><span class="sys">Pulsa «Ejecutar con hilos» o «Ejecutar secuencial».</span></div></div>
+  <div class="panel"><div class="head"><b>Línea de tiempo por hilo</b><span id="cnt"></span></div><div id="lanes"></div>
+    <p class="note">Cada casilla se ilumina cuando el hilo imprime ese número. En la versión con hilos, las filas avanzan a la vez.</p></div>
+</div>
+
+<div class="panel">
+  <div class="head"><b>Historial de ejecuciones</b><span>cada color es un hilo; cada casilla, una línea impresa</span></div>
+  <div class="scroll"><div id="hist"></div></div>
+  <div class="stat" id="stat"></div>
+</div>
+
+<div class="panel">
+  <details open><summary>¿Qué pasó con el orden de los números?</summary><p>Dentro de cada hilo el orden siempre es 1, 2, 3… Entre hilos las líneas se intercalan, y la mezcla cambia de una ejecución a otra. En secuencial siempre sale A1…A10, B1…B10, C1…C10.</p></details>
+  <details><summary>¿Por qué no siempre salen igual?</summary><p>El planificador del sistema operativo decide qué hilo corre y cuándo. Los hilos despiertan casi al mismo tiempo y diferencias de microsegundos cambian quién imprime primero. Nada en el programa fuerza un orden entre hilos.</p></details>
+  <details><summary>¿Qué ventaja tienen los hilos en problemas más grandes?</summary><p>El tiempo total se parece al de la tarea más larga y no a la suma de todas, porque los hilos traslapan sus esperas. Con 3 tareas: ≈ 3 s en secuencial contra ≈ 1 s con hilos. Esto funciona con esperas (entrada/salida); en cálculo puro, el GIL de CPython evita esa ganancia.</p></details>
+</div>
+
+<footer>Práctica 2 · Programación paralela y recurrente · Alondra Goretti González Martínez (218534681). Simulación en el navegador: el orden mostrado es aleatorio por diseño; en Python real lo decide el planificador del sistema operativo.</footer>
+</main>
+
+<script>
+const COL=['#2563eb','#0d9488','#d97706'],NAME=['A','B','C'],$=id=>document.getElementById(id);
+let n=3,run=0,raf=null;const hist=[];
+const cfg=()=>({n,p:+$('p').value,al:$('al').checked,sp:+$('sp').value});
+function simulate(mode){const{n,p,al}=cfg();const ev=[];const jit=()=>Math.random()*0.006;
+  const dl=()=>(al?p*(0.5+Math.random()):p)+jit();
+  if(mode==='seq'){let t=0;for(let i=0;i<n;i++)for(let k=1;k<=10;k++){t+=dl();ev.push({t,i,k})}return{ev,total:t}}
+  let total=0;for(let i=0;i<n;i++){let t=Math.random()*0.004;for(let k=1;k<=10;k++){t+=dl();ev.push({t,i,k})}total=Math.max(total,t)}
+  ev.sort((a,b)=>a.t-b.t);return{ev,total}}
+function buildLanes(){$('lanes').innerHTML=Array.from({length:n},(_,i)=>`<div class="lane"><b style="color:${COL[i]}">Hilo ${NAME[i]}</b><div class="cells">${Array.from({length:10},(_,k)=>`<span class="c" id="c${i}_${k+1}">${k+1}</span>`).join('')}</div></div>`).join('')}
+function stop(){if(raf)cancelAnimationFrame(raf);raf=null}
+function busy(b){['bt','bs','b10'].forEach(id=>$(id).disabled=b)}
+function start(mode){stop();const id=++run;buildLanes();
+  const{ev,total}=simulate(mode),{sp}=cfg();
+  $('mode').textContent=mode==='seq'?'Salida · ejecución secuencial':`Salida · ${n} hilos`;
+  $('term').innerHTML='';busy(true);let shown=0;const t0=performance.now();
+  const lines=[];
+  (function frame(now){if(id!==run)return;const el=(now-t0)/1000*sp;
+    while(shown<ev.length&&ev[shown].t<=el){const e=ev[shown++];
+      $('term').insertAdjacentHTML('beforeend',`<div class="${NAME[e.i]}">  Hilo ${NAME[e.i]}: ${e.k}</div>`);$('term').scrollTop=1e9;
+      const c=$(`c${e.i}_${e.k}`);c.style.background=COL[e.i];c.style.color='#fff'}
+    $('clk').textContent=Math.min(el,total).toFixed(2)+' s';$('cnt').textContent=`${shown} de ${ev.length} líneas`;
+    if(shown<ev.length){raf=requestAnimationFrame(frame)}else{$('clk').textContent=total.toFixed(2)+' s';
+      $('term').insertAdjacentHTML('beforeend',`<div class="sys">Tiempo total: ${total.toFixed(2)} s</div>`);busy(false);push(mode,ev,total)}})(t0)}
+function push(mode,ev,total){hist.push({mode,seq:ev.map(e=>[e.i,e.k]),total,n});if(hist.length>12)hist.shift();drawHist()}
+function drawHist(){let h='';let tn=0;
+  hist.forEach((r,idx)=>{const lab=r.mode==='seq'?'Secuencial':'Hilos #'+(++tn);
+    h+=`<div class="hist"><b>${lab}</b><div class="strip">${r.seq.map(([i,k])=>`<i style="background:${COL[i]}">${k}</i>`).join('')}</div><small>${r.total.toFixed(2)} s</small></div>`});
+  $('hist').innerHTML=h||'<span style="color:var(--mut)">Aún no hay ejecuciones.</span>';
+  const th=hist.filter(r=>r.mode==='thr'),keys=th.map(r=>r.seq.map(x=>x.join('')).join(' '));
+  $('stat').innerHTML=th.length?`Órdenes distintos con hilos: <b>${new Set(keys).size} de ${th.length}</b><span>(las filas con el mismo patrón son ejecuciones iguales)</span>`:''}
+$('bt').onclick=()=>start('thr');$('bs').onclick=()=>start('seq');
+$('b10').onclick=()=>{stop();run++;for(let k=0;k<10;k++){const{ev,total}=simulate('thr');push('thr',ev,total)}buildLanes();$('term').innerHTML='<span class="sys">Se simularon 10 ejecuciones con hilos. Compara el historial.</span>';$('clk').textContent='';$('cnt').textContent=''};
+$('bc').onclick=()=>{stop();run++;hist.length=0;drawHist();buildLanes();$('term').innerHTML='<span class="sys">Historial borrado.</span>';busy(false)};
+$('seg').onclick=e=>{const b=e.target.closest('button');if(!b)return;n=+b.dataset.n;[...$('seg').children].forEach(x=>x.classList.toggle('on',x===b));stop();run++;busy(false);buildLanes()};
+$('p').oninput=()=>$('pv').textContent=(+$('p').value).toFixed(2)+' s';
+buildLanes();drawHist();
+</script>
+</body>
+</html>
